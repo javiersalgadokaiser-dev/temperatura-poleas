@@ -1,6 +1,6 @@
 // Service worker: guarda la app en caché para que funcione sin conexión.
 // IMPORTANTE: subir VERSION cada vez que se publique un cambio, para que los teléfonos se actualicen.
-const VERSION = 'v1.1.0';
+const VERSION = 'v1.1.1';
 const CACHE = `temperatura-poleas-${VERSION}`;
 
 const ARCHIVOS = [

@@ -1,8 +1,9 @@
 /**
- * Temperatura poleas: recibe los registros de la app y los guarda en esta planilla de Google.
+ * Temperatura poleas: recibe los registros de la app y los guarda en una planilla de Google.
  *
  * Instalación (una sola vez):
- *  1. Crea una planilla en Google Sheets → Extensiones → Apps Script.
+ *  1. Opción A: crea una planilla en Google Sheets → Extensiones → Apps Script.
+ *     Opción B: entra a https://script.google.com → Nuevo proyecto (la planilla se crea sola en tu Drive).
  *  2. Borra el contenido de Código.gs y pega este archivo completo.
  *  3. Cambia CLAVE por una clave propia (la misma que escribirás en Ajustes de la app).
  *  4. Implementar → Nueva implementación → Tipo: Aplicación web
@@ -14,6 +15,7 @@
 
 const CLAVE = 'CAMBIA-ESTA-CLAVE';
 
+const NOMBRE_PLANILLA = 'Registro temperatura poleas';
 const HOJA_REGISTROS = 'Registros';
 const HOJA_MEDICIONES = 'Mediciones';
 const ENCABEZADOS_REGISTROS = [
@@ -33,39 +35,59 @@ function doPost(e) {
     const datos = JSON.parse(e.postData.contents);
     if (CLAVE === 'CAMBIA-ESTA-CLAVE') return responder({ ok: false, error: 'Falta configurar la CLAVE en el script de Google.' });
     if (datos.clave !== CLAVE) return responder({ ok: false, error: 'Clave incorrecta.' });
-    if (datos.accion === 'ping') return responder({ ok: true, planilla: SpreadsheetApp.getActive().getName() });
-    if (datos.accion === 'guardar') {
-      guardarRegistro(datos);
-      return responder({ ok: true });
+    if (datos.accion !== 'ping' && datos.accion !== 'guardar') return responder({ ok: false, error: 'Acción desconocida.' });
+    if (datos.accion === 'guardar') validarEnvio(datos);
+
+    // Un solo envío a la vez: evita filas mezcladas y que se creen dos planillas en el primer uso
+    const candado = LockService.getScriptLock();
+    candado.waitLock(30000);
+    try {
+      const libro = obtenerLibro();
+      if (datos.accion === 'guardar') guardarRegistro(libro, datos);
+      return responder({ ok: true, planilla: libro.getName(), urlPlanilla: libro.getUrl() });
+    } finally {
+      candado.releaseLock();
     }
-    return responder({ ok: false, error: 'Acción desconocida.' });
   } catch (err) {
     return responder({ ok: false, error: String(err && err.message ? err.message : err) });
   }
 }
 
+/**
+ * Planilla donde se guardan los datos: la del script si se creó desde Extensiones → Apps Script;
+ * si el script es independiente (script.google.com), crea una en tu Drive la primera vez y la recuerda.
+ */
+function obtenerLibro() {
+  const activo = SpreadsheetApp.getActive();
+  if (activo) return activo;
+  const propiedades = PropertiesService.getScriptProperties();
+  const id = propiedades.getProperty('ID_PLANILLA');
+  if (id) return SpreadsheetApp.openById(id);
+  const nuevo = SpreadsheetApp.create(NOMBRE_PLANILLA);
+  propiedades.setProperty('ID_PLANILLA', nuevo.getId());
+  return nuevo;
+}
+
+/** Ejecútalo desde el editor (▶ Ejecutar) para crear o ver la planilla; la URL aparece en el registro de ejecución. */
+function verPlanilla() {
+  const libro = obtenerLibro();
+  Logger.log('Planilla: ' + libro.getName() + ' → ' + libro.getUrl());
+}
+
 /** Inserta o reemplaza un registro (si se reenvía tras una corrección, no queda duplicado). */
-function guardarRegistro(datos) {
-  validarEnvio(datos);
-  const candado = LockService.getScriptLock();
-  candado.waitLock(30000);
-  try {
-    const libro = SpreadsheetApp.getActive();
-    const hojaR = obtenerHoja(libro, HOJA_REGISTROS, ENCABEZADOS_REGISTROS);
-    const hojaM = obtenerHoja(libro, HOJA_MEDICIONES, ENCABEZADOS_MEDICIONES);
-    const id = datos.registro[0];
+function guardarRegistro(libro, datos) {
+  const hojaR = obtenerHoja(libro, HOJA_REGISTROS, ENCABEZADOS_REGISTROS);
+  const hojaM = obtenerHoja(libro, HOJA_MEDICIONES, ENCABEZADOS_MEDICIONES);
+  const id = datos.registro[0];
 
-    borrarFilasDe(hojaR, id);
-    borrarFilasDe(hojaM, id);
+  borrarFilasDe(hojaR, id);
+  borrarFilasDe(hojaM, id);
 
-    const fila = datos.registro.map(textoSeguro).concat([new Date()]);
-    hojaR.getRange(hojaR.getLastRow() + 1, 1, 1, fila.length).setValues([fila]);
-    if (datos.mediciones.length) {
-      const filas = datos.mediciones.map((m) => m.map(textoSeguro));
-      hojaM.getRange(hojaM.getLastRow() + 1, 1, filas.length, ENCABEZADOS_MEDICIONES.length).setValues(filas);
-    }
-  } finally {
-    candado.releaseLock();
+  const fila = datos.registro.map(textoSeguro).concat([new Date()]);
+  hojaR.getRange(hojaR.getLastRow() + 1, 1, 1, fila.length).setValues([fila]);
+  if (datos.mediciones.length) {
+    const filas = datos.mediciones.map((m) => m.map(textoSeguro));
+    hojaM.getRange(hojaM.getLastRow() + 1, 1, filas.length, ENCABEZADOS_MEDICIONES.length).setValues(filas);
   }
 }
 

@@ -153,7 +153,9 @@ try {
       status: 200,
       contentType: 'application/json',
       headers: { 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify(ok ? { ok: true, planilla: 'Planilla de prueba' } : { ok: false, error: 'Clave incorrecta.' }),
+      body: JSON.stringify(ok
+        ? { ok: true, planilla: 'Planilla de prueba', urlPlanilla: 'https://docs.google.com/spreadsheets/d/PRUEBA/edit' }
+        : { ok: false, error: 'Clave incorrecta.' }),
     });
   };
   pagina.on('request', simularGoogle);
@@ -170,6 +172,7 @@ try {
   await pagina.click('#form-nube [type="submit"]');
   await pagina.waitForFunction(() => /todo enviado/.test(document.querySelector('#estado-nube').textContent), { timeout: 10000 });
   assert.equal(envios[0].accion, 'ping');
+  assert.equal(await pagina.$eval('#enlace-planilla', (a) => !a.hidden && a.href), 'https://docs.google.com/spreadsheets/d/PRUEBA/edit');
   const guardado = envios.find((e) => e.accion === 'guardar');
   assert.equal(guardado.registro[3], 'Cumbre');
   assert.equal(guardado.mediciones.length, 4);

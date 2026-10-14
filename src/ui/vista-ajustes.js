@@ -7,6 +7,8 @@ import { app } from './estado.js';
 import { $, esc, aviso, leerNumero, descargar, hoyISO, confirmar, dialogo } from './utilidades.js';
 
 const numero = (v) => (typeof v === 'number' ? String(v).replace('.', ',') : '');
+// El enlace viene de la respuesta de red: solo se acepta si apunta a Google Sheets
+const enlacePlanillaSeguro = (url) => typeof url === 'string' && url.startsWith('https://docs.google.com/spreadsheets/');
 
 export async function vistaAjustes(contenedor) {
   const a = app.ajustes;
@@ -70,6 +72,8 @@ export async function vistaAjustes(contenedor) {
         <p id="estado-nube" class="ayuda" aria-live="polite"></p>
         <div id="errores-nube" class="campo__error" role="alert"></div>
         <div class="acciones">
+          <a class="boton boton--texto" id="enlace-planilla" target="_blank" rel="noopener"
+            ${enlacePlanillaSeguro(a.urlPlanilla) ? `href="${esc(a.urlPlanilla)}"` : 'hidden'}>Abrir planilla</a>
           <button type="button" class="boton boton--texto" id="btn-compartir-config" ${nubeConfigurada(a) ? '' : 'hidden'}>Compartir configuración</button>
           <button type="submit" class="boton boton--relleno">Guardar y probar</button>
         </div>
@@ -85,7 +89,7 @@ export async function vistaAjustes(contenedor) {
         </div>
       </section>
 
-      <p class="ayuda version">Temperatura poleas · v1.1.0</p>
+      <p class="ayuda version">Temperatura poleas · v1.1.1</p>
     </section>`;
 
   const form = $('#form-ajustes', contenedor);
@@ -155,6 +159,12 @@ export async function vistaAjustes(contenedor) {
       }
       const r = await probarConexion(app.ajustes);
       aviso(`Conectado con la planilla "${r.planilla}".`);
+      if (enlacePlanillaSeguro(r.urlPlanilla)) {
+        await app.guardarAjustes({ urlPlanilla: r.urlPlanilla });
+        const enlace = $('#enlace-planilla', contenedor);
+        enlace.href = r.urlPlanilla;
+        enlace.hidden = false;
+      }
       await app.sincronizar({ silencioso: false });
     } catch (e) {
       $('#errores-nube', contenedor).textContent = `Guardado, pero la prueba falló: ${e.message}`;

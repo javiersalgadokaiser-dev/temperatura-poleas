@@ -7,6 +7,7 @@ export const AJUSTES_POR_DEFECTO = Object.freeze({
   margenSobreAmbiente: null, // °C sobre la T° ambiente que también marca precaución (vacío = no se usa)
   urlNube: '', // URL de la aplicación web de Google Apps Script (termina en /exec)
   claveNube: '', // clave compartida con el script; se guarda solo en el dispositivo, nunca en el código
+  urlPlanilla: '', // enlace a la planilla de Google, informado por el script al probar la conexión
 });
 
 export const ESTADOS = Object.freeze({

@@ -39,23 +39,40 @@ class HojaFalsa {
   }
 }
 
-function cargarScript(clave) {
+function crearLibroFalso(nombre, id) {
   const hojas = new Map();
-  const libro = {
-    getName: () => 'Planilla de prueba',
+  return {
+    hojas,
+    getName: () => nombre,
+    getId: () => id,
+    getUrl: () => `https://docs.google.com/spreadsheets/d/${id}/edit`,
     getSheetByName: (n) => hojas.get(n) ?? null,
     insertSheet: (n) => { const h = new HojaFalsa(); hojas.set(n, h); return h; },
   };
+}
+
+/** independiente: simula un script creado en script.google.com (sin planilla asociada). */
+function cargarScript(clave, { independiente = false } = {}) {
+  const libro = crearLibroFalso('Planilla de prueba', 'ID-ASOCIADA');
+  const creados = [];
+  const propiedades = new Map();
   const cadena = new Proxy({}, { get: (_, p) => (p === 'build' ? () => ({}) : () => cadena) });
   const contexto = vm.createContext({
-    SpreadsheetApp: { getActive: () => libro, newConditionalFormatRule: () => cadena },
+    SpreadsheetApp: {
+      getActive: () => (independiente ? null : libro),
+      create: (nombre) => { const l = crearLibroFalso(nombre, `ID-NUEVA-${creados.length + 1}`); creados.push(l); return l; },
+      openById: (id) => creados.find((l) => l.getId() === id),
+      newConditionalFormatRule: () => cadena,
+    },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => propiedades.get(k) ?? null, setProperty: (k, v) => propiedades.set(k, v) }) },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
     ContentService: { createTextOutput: (t) => ({ texto: t, setMimeType() { return this; } }), MimeType: { JSON: 'json' } },
+    Logger: { log() {} },
   });
   const fuente = clave ? CODIGO.replace("const CLAVE = 'CAMBIA-ESTA-CLAVE';", `const CLAVE = '${clave}';`) : CODIGO;
   vm.runInContext(fuente, contexto);
   const post = (cuerpo) => JSON.parse(contexto.doPost({ postData: { contents: JSON.stringify(cuerpo) } }).texto);
-  return { post, hojas };
+  return { post, hojas: libro.hojas, creados };
 }
 
 // ---------- Lógica de la app ----------
@@ -81,10 +98,11 @@ assert.match(cargarScript(null).post(construirEnvio(registro, oasis, ajustes)).e
 
 const { post, hojas } = cargarScript('secreta');
 assert.equal(post({ accion: 'ping', clave: 'otra' }).error, 'Clave incorrecta.');
-assert.deepEqual(post({ accion: 'ping', clave: 'secreta' }), { ok: true, planilla: 'Planilla de prueba' });
+const RESPUESTA_OK = { ok: true, planilla: 'Planilla de prueba', urlPlanilla: 'https://docs.google.com/spreadsheets/d/ID-ASOCIADA/edit' };
+assert.deepEqual(post({ accion: 'ping', clave: 'secreta' }), RESPUESTA_OK);
 
 // Primer envío
-assert.deepEqual(post(construirEnvio(registro, oasis, ajustes)), { ok: true });
+assert.deepEqual(post(construirEnvio(registro, oasis, ajustes)), RESPUESTA_OK);
 const regs = hojas.get('Registros');
 const meds = hojas.get('Mediciones');
 assert.equal(regs.filas.length, 2); // encabezado + 1
@@ -106,3 +124,13 @@ assert.equal(meds.filas.filter((f) => f[0] === 'reg-2').length, 4, 'el otro regi
 // Formato inválido
 assert.match(post({ accion: 'guardar', clave: 'secreta', registro: ['x'], mediciones: [] }).error, /Formato/);
 console.log('✔ script de Google: clave, inserción, reemplazo sin duplicados y escape de fórmulas');
+
+// Script independiente (creado en script.google.com): crea la planilla una sola vez y la reutiliza
+const ind = cargarScript('secreta', { independiente: true });
+const ping = ind.post({ accion: 'ping', clave: 'secreta' });
+assert.equal(ping.planilla, 'Registro temperatura poleas');
+ind.post(construirEnvio(registro, oasis, ajustes));
+ind.post(construirEnvio({ ...registro, id: 'reg-2' }, oasis, ajustes));
+assert.equal(ind.creados.length, 1, 'no debe crear más de una planilla');
+assert.equal(ind.creados[0].hojas.get('Registros').filas.length, 3);
+console.log('✔ script independiente: crea la planilla en Drive la primera vez y luego la reutiliza');
