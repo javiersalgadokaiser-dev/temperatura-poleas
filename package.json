@@ -1,0 +1,17 @@
+{
+  "name": "temperatura-poleas",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "App web instalable (PWA) para registrar la temperatura de poleas en las estaciones Oasis, Tupahue y Cumbre.",
+  "scripts": {
+    "setup": "node tools/preparar.js",
+    "start": "node tools/servidor.js",
+    "test": "node tools/probar-exportacion.js && node tools/probar-apps-script.js",
+    "test:e2e": "node tools/probar-navegador.js"
+  },
+  "devDependencies": {
+    "exceljs": "4.4.0",
+    "puppeteer-core": "25.12.0"
+  }
+}
