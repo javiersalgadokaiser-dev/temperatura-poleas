@@ -3,3 +3,5 @@ salida-pruebas/
 # Planilla original del usuario (la app usa la copia en plantilla/)
 registro temperatura.xlsx
 ~$*.xlsx
+# Script con la clave real: no se publica
+SCRIPT PARA GOOGLE*.txt
