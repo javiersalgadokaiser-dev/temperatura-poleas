@@ -65,6 +65,12 @@ export const ajustes = {
   guardar: (valores) => operar('ajustes', 'readwrite', (s) => s.put(valores, 'principal')),
 };
 
+/** Caché de datos descargados (p. ej. el historial de Google Sheets) para verlos sin conexión. */
+export const cache = {
+  obtener: (clave) => operar('ajustes', 'readonly', (s) => s.get(`cache:${clave}`)),
+  guardar: (clave, valor) => operar('ajustes', 'readwrite', (s) => s.put(valor, `cache:${clave}`)),
+};
+
 /** Pide al navegador que no borre los datos automáticamente cuando falte espacio. */
 export async function solicitarAlmacenamientoPersistente() {
   try {

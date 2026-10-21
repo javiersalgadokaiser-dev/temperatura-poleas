@@ -1,6 +1,6 @@
 // Envío de registros a Google Sheets (Apps Script) con cola: si no hay señal, se reintenta después.
 import { ESTACIONES } from './estaciones.js';
-import { registros as repo } from './db.js';
+import { registros as repo, cache } from './db.js';
 import { construirEnvio, nubeConfigurada } from '../logica/nube.js';
 
 const TIEMPO_MAXIMO_MS = 30000;
@@ -35,6 +35,27 @@ export async function llamarNube(url, cuerpo) {
 }
 
 export const probarConexion = (ajustes) => llamarNube(ajustes.urlNube, { accion: 'ping', clave: ajustes.claveNube });
+
+/**
+ * Descarga el historial completo de la planilla y lo guarda en caché.
+ * Si el script de Google es de una versión anterior (sin "historial"), lanza un error explicativo.
+ */
+export async function descargarHistorial(ajustes) {
+  let datos;
+  try {
+    datos = await llamarNube(ajustes.urlNube, { accion: 'historial', clave: ajustes.claveNube });
+  } catch (e) {
+    if (/Acción desconocida/.test(e.message)) {
+      throw new Error('Actualiza el script de Google a la versión 1.2 para ver el historial de la planilla.');
+    }
+    throw e;
+  }
+  const historial = { registros: datos.registros || [], lecturas: datos.lecturas || [], descargadoEn: new Date().toISOString() };
+  await cache.guardar('historial', historial);
+  return historial;
+}
+
+export const historialEnCache = () => cache.obtener('historial');
 
 /** Registros finalizados que nunca se enviaron o que cambiaron después de enviarse. */
 export const estaPendiente = (r) => r.estado === 'completo' && (r.pendienteNube || !r.enviadoNubeEn);

@@ -7,10 +7,11 @@
   "scripts": {
     "setup": "node tools/preparar.js",
     "start": "node tools/servidor.js",
-    "test": "node tools/probar-exportacion.js && node tools/probar-apps-script.js",
+    "test": "node tools/probar-exportacion.js && node tools/probar-apps-script.js && node tools/probar-tendencias.js",
     "test:e2e": "node tools/probar-navegador.js"
   },
   "devDependencies": {
+    "chart.js": "4.5.1",
     "exceljs": "4.4.0",
     "puppeteer-core": "25.12.0"
   }

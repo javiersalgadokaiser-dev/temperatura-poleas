@@ -140,22 +140,33 @@ export async function entregarArchivo(blob, nombre, titulo = 'Archivo listo') {
 const TIPO_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 export const blobExcel = (buffer) => new Blob([buffer], { type: TIPO_XLSX });
 
-let cargaExcelJS = null;
-/** Carga la librería ExcelJS solo cuando se necesita (pesa ~1 MB). */
-export function cargarExcelJS() {
-  if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
-  cargaExcelJS ??= new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = 'vendor/exceljs.min.js';
-    s.onload = () => resolve(window.ExcelJS);
-    s.onerror = () => {
-      cargaExcelJS = null;
-      reject(new Error('No se pudo cargar el generador de Excel. Abre la app con conexión una vez para guardarlo.'));
-    };
-    document.head.append(s);
-  });
-  return cargaExcelJS;
+const cargasEnCurso = new Map();
+/** Carga una librería de vendor/ solo cuando se necesita y devuelve la variable global que define. */
+function cargarLibreria(src, global, mensajeError) {
+  if (window[global]) return Promise.resolve(window[global]);
+  if (!cargasEnCurso.has(src)) {
+    cargasEnCurso.set(src, new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = () => resolve(window[global]);
+      s.onerror = () => {
+        cargasEnCurso.delete(src);
+        s.remove();
+        reject(new Error(mensajeError));
+      };
+      document.head.append(s);
+    }));
+  }
+  return cargasEnCurso.get(src);
 }
+
+/** ExcelJS pesa ~1 MB: se carga al exportar. */
+export const cargarExcelJS = () =>
+  cargarLibreria('vendor/exceljs.min.js', 'ExcelJS', 'No se pudo cargar el generador de Excel. Abre la app con conexión una vez para guardarlo.');
+
+/** Chart.js: se carga al abrir la pestaña de gráficos. */
+export const cargarChartJS = () =>
+  cargarLibreria('vendor/chart.umd.min.js', 'Chart', 'No se pudo cargar la librería de gráficos. Abre la app con conexión una vez para guardarla.');
 
 let plantillaCache = null;
 export async function obtenerPlantilla() {

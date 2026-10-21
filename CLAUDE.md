@@ -22,7 +22,9 @@ Decisiones del usuario (2026-10-14):
 Estructura:
 - `src/data/estaciones.js`: lo **genera** `tools/generar-estaciones.js` desde `plantilla/registro-temperatura.xlsx`; no se edita a mano. Cada polea guarda la celda Excel donde se escribe su valor (etiqueta en C/E → valor en D/F).
 - `src/data/db.js`: repositorio IndexedDB. `src/logica/`: alertas y exportación, sin dependencias del DOM y probadas en Node. `src/ui/`: vistas y estilos (tokens en `estilos.css`).
-- `vendor/exceljs.min.js`: se copia con `npm run setup`. `sw.js`: hay que subir `VERSION` en cada publicación.
+- `vendor/exceljs.min.js` y `vendor/chart.umd.min.js` (Chart.js 4.5.1): se copian con `npm run setup` y se cargan solo cuando se usan. `sw.js`: hay que subir `VERSION` en cada publicación.
+- Gráficos (`src/ui/vista-graficos.js` y `src/ui/grafico-tendencia.js`, con la lógica en `src/logica/tendencias.js`): historial de Sheets (acción `historial` del script, en caché en IndexedDB) más los registros locales. Los colores salen de los tokens `--viz-*`, validados con el validador de paleta de dataviz.
+- Enrutador: cada pantalla dibuja en su propio contenedor y se descarta si el usuario navega mientras carga. Las vistas que hacen `await` no deben escribir fuera de su `contenedor`.
 
 Comandos: `npm install`, `npm run setup`, `npm start` (http://localhost:5173), `npm test` (lógica, Excel y Apps Script simulado) y `npm run test:e2e` (Chrome/Edge headless; con `APP_URL` se prueba contra la versión publicada). En Windows, el usuario abre la app con `Abrir app.cmd`, porque PowerShell bloquea `npm.ps1`.
 

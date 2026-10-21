@@ -24,6 +24,10 @@ class HojaFalsa {
     const hoja = this;
     const rango = {
       getValues: () => Array.from({ length: nFilas }, (_, i) => Array.from({ length: nCols }, (_, j) => hoja.filas[fila - 1 + i]?.[col - 1 + j] ?? '')),
+      // Como Google Sheets: las fechas se muestran en formato local y las horas como "11:00:00"
+      getDisplayValues: () => rango.getValues().map((f) => f.map((v) => (v instanceof Date
+        ? `${v.getUTCDate()}/${v.getUTCMonth() + 1}/${v.getUTCFullYear()}`
+        : /^\d{2}:\d{2}$/.test(v) ? `${v}:00` : String(v)))),
       setValues(valores) {
         assert.equal(valores.length, nFilas, 'setValues: cantidad de filas');
         valores.forEach((v, i) => {
@@ -45,6 +49,7 @@ function crearLibroFalso(nombre, id) {
     hojas,
     getName: () => nombre,
     getId: () => id,
+    getSpreadsheetTimeZone: () => 'UTC',
     getUrl: () => `https://docs.google.com/spreadsheets/d/${id}/edit`,
     getSheetByName: (n) => hojas.get(n) ?? null,
     insertSheet: (n) => { const h = new HojaFalsa(); hojas.set(n, h); return h; },
@@ -68,6 +73,7 @@ function cargarScript(clave, { independiente = false } = {}) {
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
     ContentService: { createTextOutput: (t) => ({ texto: t, setMimeType() { return this; } }), MimeType: { JSON: 'json' } },
     Logger: { log() {} },
+    Utilities: { formatDate: (d) => d.toISOString().slice(0, 10) },
   });
   const fuente = clave ? CODIGO.replace("const CLAVE = 'CAMBIA-ESTA-CLAVE';", `const CLAVE = '${clave}';`) : CODIGO;
   vm.runInContext(fuente, contexto);
@@ -123,6 +129,16 @@ assert.equal(meds.filas.filter((f) => f[0] === 'reg-2').length, 4, 'el otro regi
 
 // Formato inválido
 assert.match(post({ accion: 'guardar', clave: 'secreta', registro: ['x'], mediciones: [] }).error, /Formato/);
+
+// Historial para gráficos. Google convierte "2026-10-14" en fecha al escribirla: se simula aquí.
+regs.filas[1][1] = new Date(Date.UTC(2026, 9, 14));
+const historial = post({ accion: 'historial', clave: 'secreta' });
+assert.equal(historial.ok, true);
+assert.deepEqual(historial.registros.find((r) => r[0] === 'reg-1'), ['reg-1', '2026-10-14', '09:15', 'Oasis', '\'=HYPERLINK("x")', -2, 5]);
+assert.deepEqual(historial.lecturas.filter((l) => l[0] === 'reg-1'), [['reg-1', 'D9', 31]]);
+assert.equal(historial.lecturas.length, 5);
+assert.equal(post({ accion: 'historial', clave: 'mala' }).error, 'Clave incorrecta.');
+console.log('✔ script de Google: historial para gráficos (fechas convertidas por Google incluidas)');
 console.log('✔ script de Google: clave, inserción, reemplazo sin duplicados y escape de fórmulas');
 
 // Script independiente (creado en script.google.com): crea la planilla una sola vez y la reutiliza

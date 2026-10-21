@@ -1,6 +1,6 @@
 // Service worker: guarda la app en caché para que funcione sin conexión.
 // IMPORTANTE: subir VERSION cada vez que se publique un cambio, para que los teléfonos se actualicen.
-const VERSION = 'v1.1.1';
+const VERSION = 'v1.2.0';
 const CACHE = `temperatura-poleas-${VERSION}`;
 
 const ARCHIVOS = [
@@ -16,6 +16,10 @@ const ARCHIVOS = [
   'src/ui/vista-registro.js',
   'src/ui/vista-historial.js',
   'src/ui/vista-ajustes.js',
+  'src/ui/vista-graficos.js',
+  'src/ui/grafico-tendencia.js',
+  'src/logica/tendencias.js',
+  'vendor/chart.umd.min.js',
   'src/data/db.js',
   'src/data/estaciones.js',
   'src/data/nube.js',

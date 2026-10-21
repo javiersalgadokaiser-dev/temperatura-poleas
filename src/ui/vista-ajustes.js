@@ -89,7 +89,7 @@ export async function vistaAjustes(contenedor) {
         </div>
       </section>
 
-      <p class="ayuda version">Temperatura poleas · v1.1.1</p>
+      <p class="ayuda version">Temperatura poleas · v1.2.0</p>
     </section>`;
 
   const form = $('#form-ajustes', contenedor);

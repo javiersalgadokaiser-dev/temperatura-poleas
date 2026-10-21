@@ -11,6 +11,8 @@
  *  5. Autoriza los permisos y copia la URL que termina en /exec en Ajustes de la app.
  *
  * Si cambias este código después: Implementar → Gestionar implementaciones → Editar → Versión: Nueva.
+ *
+ * Versión 1.2: agrega la acción "historial" (lectura para los gráficos de la app).
  */
 
 const CLAVE = 'CAMBIA-ESTA-CLAVE';
@@ -35,7 +37,7 @@ function doPost(e) {
     const datos = JSON.parse(e.postData.contents);
     if (CLAVE === 'CAMBIA-ESTA-CLAVE') return responder({ ok: false, error: 'Falta configurar la CLAVE en el script de Google.' });
     if (datos.clave !== CLAVE) return responder({ ok: false, error: 'Clave incorrecta.' });
-    if (datos.accion !== 'ping' && datos.accion !== 'guardar') return responder({ ok: false, error: 'Acción desconocida.' });
+    if (['ping', 'guardar', 'historial'].indexOf(datos.accion) === -1) return responder({ ok: false, error: 'Acción desconocida.' });
     if (datos.accion === 'guardar') validarEnvio(datos);
 
     // Un solo envío a la vez: evita filas mezcladas y que se creen dos planillas en el primer uso
@@ -44,7 +46,13 @@ function doPost(e) {
     try {
       const libro = obtenerLibro();
       if (datos.accion === 'guardar') guardarRegistro(libro, datos);
-      return responder({ ok: true, planilla: libro.getName(), urlPlanilla: libro.getUrl() });
+      const respuesta = { ok: true, planilla: libro.getName(), urlPlanilla: libro.getUrl() };
+      if (datos.accion === 'historial') {
+        const historial = leerHistorial(libro);
+        respuesta.registros = historial.registros;
+        respuesta.lecturas = historial.lecturas;
+      }
+      return responder(respuesta);
     } finally {
       candado.releaseLock();
     }
@@ -89,6 +97,61 @@ function guardarRegistro(libro, datos) {
     const filas = datos.mediciones.map((m) => m.map(textoSeguro));
     hojaM.getRange(hojaM.getLastRow() + 1, 1, filas.length, ENCABEZADOS_MEDICIONES.length).setValues(filas);
   }
+}
+
+/**
+ * Historial compacto para los gráficos de la app:
+ *  registros: [ID, fecha 'yyyy-MM-dd', hora 'HH:mm', estación, técnico, T° ambiente, velocidad]
+ *  lecturas:  [ID registro, celda Excel, temperatura]
+ */
+function leerHistorial(libro) {
+  const zona = libro.getSpreadsheetTimeZone();
+  const registros = [];
+  const lecturas = [];
+
+  const hojaR = libro.getSheetByName(HOJA_REGISTROS);
+  if (hojaR && hojaR.getLastRow() > 1) {
+    const rango = hojaR.getRange(2, 1, hojaR.getLastRow() - 1, 7);
+    const valores = rango.getValues();
+    const visibles = rango.getDisplayValues(); // la hora se lee como se ve: evita desfases de zona horaria
+    for (let i = 0; i < valores.length; i++) {
+      const f = valores[i];
+      const fecha = aFechaISO(f[1], visibles[i][1], zona);
+      if (!f[0] || !fecha) continue;
+      registros.push([String(f[0]), fecha, aHora(visibles[i][2]), String(f[3]), String(f[4]), aNumero(f[5]), aNumero(f[6])]);
+    }
+  }
+
+  const hojaM = libro.getSheetByName(HOJA_MEDICIONES);
+  if (hojaM && hojaM.getLastRow() > 1) {
+    const valores = hojaM.getRange(2, 1, hojaM.getLastRow() - 1, 9).getValues();
+    for (let i = 0; i < valores.length; i++) {
+      const f = valores[i];
+      const temperatura = aNumero(f[8]);
+      if (f[0] && f[7] && temperatura !== null) lecturas.push([String(f[0]), String(f[7]), temperatura]);
+    }
+  }
+  return { registros: registros, lecturas: lecturas };
+}
+
+function aFechaISO(valor, visible, zona) {
+  if (valor instanceof Date) return Utilities.formatDate(valor, zona, 'yyyy-MM-dd');
+  const texto = String(visible || valor || '');
+  let m = texto.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+  m = texto.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  return m ? m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2) : '';
+}
+
+function aHora(visible) {
+  const m = String(visible || '').match(/(\d{1,2}):(\d{2})/);
+  return m ? ('0' + m[1]).slice(-2) + ':' + m[2] : '';
+}
+
+function aNumero(valor) {
+  if (typeof valor === 'number') return valor;
+  const texto = String(valor === null || valor === undefined ? '' : valor).replace(',', '.').trim();
+  return texto !== '' && !isNaN(Number(texto)) ? Number(texto) : null;
 }
 
 function validarEnvio(datos) {

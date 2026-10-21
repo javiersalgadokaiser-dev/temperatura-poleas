@@ -18,6 +18,12 @@ App web instalable (PWA) para registrar la temperatura de las poleas en las esta
 - **En Google Sheets:** cada registro finalizado se copia a una planilla de tu Drive. Si no hay señal, queda en cola y se envía solo al volver la conexión. Para activarlo, sigue las [instrucciones de Google Sheets](google-apps-script/INSTRUCCIONES.md); es una sola vez.
 - **Respaldo manual:** *Ajustes → Descargar respaldo* (archivo JSON).
 
+## Gráficos
+
+La pestaña **Gráficos** muestra la tendencia de temperatura de cada componente, con la temperatura ambiente como referencia y las líneas de precaución y crítico. Se puede filtrar por estación, componente y período, y los datos también se ven en una tabla.
+
+Los datos vienen de dos fuentes: el historial de Google Sheets y los registros finalizados en el teléfono. El historial se guarda en el teléfono para verlo sin señal y se actualiza cada vez que se abre la pestaña con conexión. Para esto el script de Google debe estar en la **versión 1.2 o posterior**.
+
 ## Publicar cambios
 
 La app se publica con GitHub Pages desde la rama `main`. Para publicar un cambio:
@@ -33,8 +39,8 @@ Requisitos: Node.js 18 o superior (probado con 24.19.0). Para las pruebas en nav
 - **Lo más fácil:** doble clic en **`Abrir app.cmd`**. Abre http://localhost:5173; no cierres la ventana negra mientras la uses.
 - **Desde la terminal:**
   ```bash
-  npm install        # ExcelJS 4.4.0 y puppeteer-core 25.12.0 (solo para pruebas)
-  npm run setup      # copia ExcelJS a vendor/ y genera los íconos
+  npm install        # ExcelJS 4.4.0, Chart.js 4.5.1 y puppeteer-core 25.12.0 (solo para pruebas)
+  npm run setup      # copia ExcelJS y Chart.js a vendor/ y genera los íconos
   npm start          # http://localhost:5173
   ```
 

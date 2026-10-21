@@ -8,15 +8,21 @@ import { fileURLToPath } from 'node:url';
 
 const RAIZ = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-// ---------- 1) ExcelJS ----------
-const origen = path.join(RAIZ, 'node_modules', 'exceljs', 'dist', 'exceljs.min.js');
-if (!fs.existsSync(origen)) {
-  console.error('Falta ExcelJS. Ejecuta primero: npm install');
-  process.exit(1);
-}
+// ---------- 1) Librerías (ExcelJS 4.4.0 y Chart.js 4.5.1) ----------
+const LIBRERIAS = [
+  ['exceljs/dist/exceljs.min.js', 'exceljs.min.js'],
+  ['chart.js/dist/chart.umd.min.js', 'chart.umd.min.js'],
+];
 fs.mkdirSync(path.join(RAIZ, 'vendor'), { recursive: true });
-fs.copyFileSync(origen, path.join(RAIZ, 'vendor', 'exceljs.min.js'));
-console.log('✔ vendor/exceljs.min.js');
+for (const [desde, nombre] of LIBRERIAS) {
+  const origen = path.join(RAIZ, 'node_modules', ...desde.split('/'));
+  if (!fs.existsSync(origen)) {
+    console.error(`Falta ${desde}. Ejecuta primero: npm install`);
+    process.exit(1);
+  }
+  fs.copyFileSync(origen, path.join(RAIZ, 'vendor', nombre));
+  console.log(`✔ vendor/${nombre}`);
+}
 
 // ---------- 2) Íconos ----------
 // Colores del tema

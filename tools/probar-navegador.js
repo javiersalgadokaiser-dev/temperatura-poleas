@@ -34,6 +34,19 @@ if (!process.env.APP_URL) {
   await new Promise((r) => servidor.stdout.once('data', r));
 }
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Historial simulado de la planilla: 24 meses de Oasis (día 15 de cada mes), con una lectura en precaución
+const HISTORIAL_SIMULADO = { registros: [], lecturas: [] };
+for (let i = 0; i < 24; i++) {
+  const hoy = new Date();
+  const d = new Date(hoy.getFullYear(), hoy.getMonth() - 23 + i, 15);
+  const fecha = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-15`;
+  if (fecha > hoy.toISOString().slice(0, 10)) continue;
+  const id = `sim-${i}`;
+  HISTORIAL_SIMULADO.registros.push([id, fecha, '11:00', 'Oasis', `Técnico ${i % 3 + 1}`, Math.round(12 + 6 * Math.sin(i / 2)), 3]);
+  HISTORIAL_SIMULADO.lecturas.push([id, 'D9', i === 20 ? 58 : Math.round((22 + 6 * Math.sin(i / 2) + i * 0.5) * 10) / 10]);
+  HISTORIAL_SIMULADO.lecturas.push([id, 'D12', Math.round((30 + 5 * Math.cos(i / 3)) * 10) / 10]);
+}
 const pulsarEnDialogo = (pagina, texto) =>
   pagina.evaluate((t) => [...document.querySelectorAll('dialog[open] button')].find((b) => b.textContent === t).click(), texto);
 
@@ -149,13 +162,12 @@ try {
     const cuerpo = JSON.parse(req.postData());
     envios.push(cuerpo);
     const ok = cuerpo.clave === 'secreta';
+    const base = { ok: true, planilla: 'Planilla de prueba', urlPlanilla: 'https://docs.google.com/spreadsheets/d/PRUEBA/edit' };
     req.respond({
       status: 200,
       contentType: 'application/json',
       headers: { 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify(ok
-        ? { ok: true, planilla: 'Planilla de prueba', urlPlanilla: 'https://docs.google.com/spreadsheets/d/PRUEBA/edit' }
-        : { ok: false, error: 'Clave incorrecta.' }),
+      body: JSON.stringify(!ok ? { ok: false, error: 'Clave incorrecta.' } : cuerpo.accion === 'historial' ? { ...base, ...HISTORIAL_SIMULADO } : base),
     });
   };
   pagina.on('request', simularGoogle);
@@ -211,16 +223,67 @@ try {
   await pagina.waitForFunction(() => location.hash === '#/ajustes' && document.querySelector('#n-url'));
   await pagina.waitForFunction((u) => document.querySelector('#n-url').value === u, {}, otra.urlNube);
   console.log('✔ enlace de configuración aplicado');
-  pagina.off('request', simularGoogle);
-  await pagina.setRequestInterception(false);
+
+  // ---- Gráficos: historial desde Google Sheets + filtros ----
+  await pagina.goto(`${URL_APP}#/graficos`, { waitUntil: 'networkidle0' });
+  await pagina.waitForFunction(() => /Historial de Google Sheets del .*\(\d+ registros\)$/.test(document.querySelector('#g-origen').textContent), { timeout: 15000 });
+  await pagina.waitForSelector('#g-caja canvas');
+  assert.equal(await pagina.$eval('#g-componente', (s) => s.value), 'D9', 'por defecto, el primer componente con datos');
+  assert.match(await pagina.$eval('#g-componente option[value="F9"]', (o) => o.textContent), /sin datos/);
+  const filasTabla = () => pagina.$$eval('#g-tabla tbody tr', (f) => f.length);
+  const conDatosUltimoAno = HISTORIAL_SIMULADO.registros.filter((r) => r[1] >= new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10)).length;
+  assert.ok(Math.abs((await filasTabla()) - conDatosUltimoAno) <= 1, 'período por defecto: último año');
+  assert.match(await pagina.$eval('#g-resumen', (e) => e.textContent), /Última lectura[\s\S]*Máxima[\s\S]*58 °C/);
+  assert.match(await pagina.$eval('#g-leyenda', (e) => e.textContent), /Rodamiento Superior[\s\S]*Temperatura ambiente[\s\S]*Precaución/);
+
+  // Tooltip con el puntero y con el teclado
+  await pagina.$eval('#g-caja', (el) => el.scrollIntoView({ block: 'center' }));
+  const caja = await (await pagina.$('#g-caja canvas')).boundingBox();
+  await pagina.touchscreen.tap(caja.x + caja.width * 0.6, caja.y + caja.height / 2); // en el teléfono se toca el gráfico
+  await pagina.waitForSelector('.tooltip-grafico:not([hidden])');
+  assert.match(await pagina.$eval('.tooltip-grafico', (t) => t.textContent), /°C[\s\S]*Rodamiento Superior[\s\S]*Ambiente/);
+  await pagina.$eval('#avisos', (a) => a.replaceChildren()); // los avisos de pasos anteriores taparían la captura
+  await (await pagina.$('.tarjeta-grafico')).screenshot({ path: path.join(SALIDA, '10-graficos.png') });
+  await pagina.focus('#g-caja canvas');
+  await pagina.keyboard.press('End');
+  assert.match(await pagina.$eval('.tooltip-grafico', (t) => !t.hidden && t.textContent), /°C/);
+  await pagina.keyboard.press('ArrowLeft');
+  console.log('✔ gráficos: historial de Google, resumen, leyenda, tooltip con puntero y teclado');
+
+  await pagina.select('#g-periodo', 'todo');
+  assert.equal(await filasTabla(), HISTORIAL_SIMULADO.registros.length);
+  await pagina.select('#g-componente', 'F9');
+  assert.equal(await pagina.$eval('#g-vacio', (e) => !e.hidden && e.textContent.includes('No hay lecturas')), true);
+  await pagina.select('#g-componente', 'D12');
+  assert.equal(await filasTabla(), HISTORIAL_SIMULADO.registros.length);
+  await pagina.click('[data-estacion="cumbre"]');
+  assert.equal(await pagina.$eval('#g-componente', (s) => s.value), 'D9');
+  assert.equal(await filasTabla(), 1, 'Cumbre: el registro hecho en el teléfono');
+  console.log('✔ gráficos: filtros de período, componente sin datos y cambio de estación');
+  await pagina.click('[data-estacion="oasis"]');
+  await pagina.select('#g-componente', 'D9');
+
+  // La simulación de Google sigue activa hasta el final: la app quedó configurada con una URL ficticia
 
   // ---- Escritorio y modo oscuro ----
   await pagina.setViewport({ width: 1280, height: 900 });
   await pagina.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]);
+  // Cambiar a escritorio recarga la página en Gráficos; se navega de inmediato a Historial mientras Gráficos carga:
+  // la pantalla abandonada no debe pisar la nueva (antes fallaba aquí)
   await pagina.goto(`${URL_APP}#/historial`, { waitUntil: 'networkidle0' });
+  await pagina.waitForSelector('.registro-item', { timeout: 5000 });
+  await esperar(500);
+  assert.equal(await pagina.$('.registro-item') !== null, true, 'Historial sigue visible tras terminar de cargar Gráficos');
   await pagina.click('.registro-item');
   await pagina.waitForSelector('#form-registro');
   await pagina.screenshot({ path: path.join(SALIDA, '7-escritorio-oscuro.png') });
+  // Gráficos en escritorio oscuro, con los datos guardados en caché (sin pedir a Google)
+  await pagina.goto(`${URL_APP}#/graficos`, { waitUntil: 'networkidle0' });
+  await pagina.waitForSelector('#g-caja canvas');
+  await pagina.select('#g-periodo', 'todo');
+  await esperar(300);
+  await pagina.$eval('#avisos', (a) => a.replaceChildren());
+  await (await pagina.$('.tarjeta-grafico')).screenshot({ path: path.join(SALIDA, '11-graficos-escritorio-oscuro.png') });
 
   assert.deepEqual(errores, [], 'no debe haber errores en la consola');
   console.log('\nTodo OK. Capturas en salida-pruebas/');

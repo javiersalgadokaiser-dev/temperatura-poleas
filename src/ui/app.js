@@ -6,25 +6,30 @@ import { vistaInicio } from './vista-inicio.js';
 import { vistaRegistro, vistaNuevoRegistro } from './vista-registro.js';
 import { vistaHistorial } from './vista-historial.js';
 import { vistaAjustes, vistaConfigurarNube } from './vista-ajustes.js';
+import { vistaGraficos } from './vista-graficos.js';
 
 const RUTAS = [
   { patron: /^\/$/, vista: vistaInicio, seccion: 'inicio' },
   { patron: /^\/nuevo\/(\w+)$/, vista: vistaNuevoRegistro, seccion: 'inicio' },
   { patron: /^\/registro\/([\w-]+)$/, vista: vistaRegistro, seccion: 'historial' },
   { patron: /^\/historial$/, vista: vistaHistorial, seccion: 'historial' },
+  { patron: /^\/graficos$/, vista: vistaGraficos, seccion: 'graficos' },
   { patron: /^\/ajustes$/, vista: vistaAjustes, seccion: 'ajustes' },
   { patron: /^\/configurar\/([\w-]+)$/, vista: vistaConfigurarNube, seccion: 'ajustes' },
 ];
 
 let limpiarVistaAnterior = null;
+let navegacionActual = 0;
 
 async function enrutar() {
   const ruta = location.hash.slice(1) || '/';
   const coincidencia = RUTAS.map((r) => ({ r, m: ruta.match(r.patron) })).find((x) => x.m);
-  const contenedor = $('#vista');
+  const navegacion = ++navegacionActual;
 
-  if (typeof limpiarVistaAnterior === 'function') await limpiarVistaAnterior();
+  const limpiar = limpiarVistaAnterior;
   limpiarVistaAnterior = null;
+  if (typeof limpiar === 'function') await limpiar();
+  if (navegacion !== navegacionActual) return; // el usuario ya navegó a otra pantalla
 
   if (!coincidencia) {
     app.navegar('/', { reemplazar: true });
@@ -34,11 +39,20 @@ async function enrutar() {
   // El formulario de registro usa toda la pantalla, sin barra inferior
   document.body.classList.toggle('sin-nav', coincidencia.r.patron.source.includes('registro'));
 
-  contenedor.setAttribute('aria-busy', 'true');
+  // Cada pantalla dibuja en su propio contenedor: si termina de cargar cuando el usuario ya se fue,
+  // escribe en un elemento desconectado y no pisa la pantalla nueva.
+  const vista = $('#vista');
+  const contenedor = document.createElement('div');
+  vista.replaceChildren(contenedor);
+  vista.setAttribute('aria-busy', 'true');
+  window.scrollTo(0, 0);
   try {
-    limpiarVistaAnterior = await coincidencia.r.vista(contenedor, ...coincidencia.m.slice(1));
+    const limpieza = await coincidencia.r.vista(contenedor, ...coincidencia.m.slice(1));
+    if (navegacion === navegacionActual) limpiarVistaAnterior = limpieza;
+    else if (typeof limpieza === 'function') await limpieza(); // pantalla abandonada mientras cargaba
   } catch (e) {
     console.error(e);
+    if (navegacion !== navegacionActual) return;
     contenedor.innerHTML = `
       <section class="pagina">
         <div class="vacio" role="alert">
@@ -48,8 +62,7 @@ async function enrutar() {
         </div>
       </section>`;
   } finally {
-    contenedor.removeAttribute('aria-busy');
-    window.scrollTo(0, 0);
+    if (navegacion === navegacionActual) vista.removeAttribute('aria-busy');
   }
 }
 
