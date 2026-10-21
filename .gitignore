@@ -5,3 +5,5 @@ registro temperatura.xlsx
 ~$*.xlsx
 # Script con la clave real: no se publica
 SCRIPT PARA GOOGLE*.txt
+# Exportaciones de Microsoft Forms: contienen correos y nombres de personas, no se publican
+Temperatura de poleas estación*.xlsx

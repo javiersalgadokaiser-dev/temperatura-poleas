@@ -48,6 +48,20 @@ npm run test:e2e   # flujo completo en Chrome/Edge headless, con capturas en sal
 APP_URL=https://javiersalgadokaiser-dev.github.io/temperatura-poleas/ npm run test:e2e   # contra la versión publicada
 ```
 
+### Importar registros antiguos de Microsoft Forms
+
+Deja en la carpeta del proyecto los Excel exportados de Forms (`Temperatura de poleas estación <Estación>(…).xlsx`) y ejecuta:
+
+```bash
+node tools/importar-forms.js --simular                                  # revisa y muestra el reporte, sin enviar
+NUBE_URL="<url /exec>" NUBE_CLAVE="<clave>" node tools/importar-forms.js # envía a Google Sheets
+```
+
+El importador hace lo siguiente:
+- Corrige el punto decimal omitido (ej. `261` → `26.1`) y anota cada corrección en *Observaciones*.
+- Usa IDs fijos, así que repetirlo no duplica registros.
+- No publica esos Excel en GitHub, porque contienen correos de los técnicos.
+
 ### Si cambia la planilla
 
 1. Reemplaza `plantilla/registro-temperatura.xlsx`.
